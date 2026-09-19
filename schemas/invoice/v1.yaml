@@ -1,0 +1,77 @@
+code: invoice
+version: 1
+title: Счёт на оплату
+detection_markers:
+  - Счёт на оплату
+  - Счет на оплату
+  - Счёт №
+
+fields:
+  - key: doc_number
+    title: Номер документа
+    type: string
+    critical: true
+    required: true
+    max_length: 50
+  - key: doc_date
+    title: Дата документа
+    type: date
+    critical: true
+    required: true
+  - key: supplier_inn
+    title: ИНН поставщика
+    type: inn
+    critical: true
+    required: true
+  - key: supplier_name
+    title: Поставщик
+    type: string
+    required: true
+  - key: buyer_inn
+    title: ИНН покупателя
+    type: inn
+    required: true
+  - key: buyer_name
+    title: Покупатель
+    type: string
+    required: true
+  - key: amount_without_vat
+    title: Сумма без НДС
+    type: money
+    required: true
+  - key: vat_rate
+    title: Ставка НДС
+    type: percent
+    required: true
+  - key: vat_amount
+    title: Сумма НДС
+    type: money
+    required: true
+  - key: total_amount
+    title: Сумма к оплате
+    type: money
+    critical: true
+    required: true
+  - key: currency
+    title: Валюта
+    type: currency
+    default: RUB
+
+validators:
+  - required_fields
+  - inn_checksum
+  - date_sanity
+  - vat_rate_for_document_date
+  - vat_calculation
+  - total_equals_subtotal_plus_vat
+  - currency_known
+  - critical_field_grounding
+
+dedup_key:
+  - supplier_inn
+  - doc_number
+  - doc_date
+  - total_amount
+
+prompt: invoice/v1.jinja
+
