@@ -1,0 +1,32 @@
+code: service_act
+version: 1
+title: Акт выполненных работ
+detection_markers:
+  - Акт выполненных работ
+  - Акт оказанных услуг
+  - Акт №
+
+fields:
+  - { key: doc_number, title: Номер акта, type: string, critical: true, required: true, max_length: 50 }
+  - { key: doc_date, title: Дата акта, type: date, critical: true, required: true }
+  - { key: supplier_inn, title: ИНН исполнителя, type: inn, critical: true, required: true }
+  - { key: supplier_name, title: Исполнитель, type: string, required: true }
+  - { key: buyer_inn, title: ИНН заказчика, type: inn, required: true }
+  - { key: buyer_name, title: Заказчик, type: string, required: true }
+  - { key: amount_without_vat, title: Стоимость без НДС, type: money, required: true }
+  - { key: vat_rate, title: Ставка НДС, type: percent, required: true }
+  - { key: vat_amount, title: Сумма НДС, type: money, required: true }
+  - { key: total_amount, title: Стоимость работ, type: money, critical: true, required: true }
+  - { key: currency, title: Валюта, type: currency, default: RUB }
+
+validators:
+  - required_fields
+  - inn_checksum
+  - date_sanity
+  - vat_calculation
+  - total_equals_subtotal_plus_vat
+  - currency_known
+  - critical_field_grounding
+
+dedup_key: [supplier_inn, doc_number, doc_date, total_amount]
+prompt: service_act/v1.jinja

@@ -3,6 +3,8 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+PROJECT_ROOT = Path(__file__).resolve().parents[5]
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -24,7 +26,10 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
 
     storage_root: Path = Path("storage")
+    web_dist_root: Path | None = None
     max_upload_size_mb: int = 20
+    tesseract_cmd: Path | None = None
+    ocr_languages: str = "rus+eng"
 
     s3_endpoint: str = "http://localhost:9000"
     s3_access_key: str = "docflow"
@@ -33,6 +38,13 @@ class Settings(BaseSettings):
 
     llm_provider: str = "mock"
     anthropic_api_key: str | None = None
+    anthropic_model: str | None = None
+    schemas_root: Path = PROJECT_ROOT / "schemas"
+    prompts_root: Path = PROJECT_ROOT / "prompts"
+    llm_fixtures_root: Path = PROJECT_ROOT / "fixtures" / "llm"
+    evaluation_dataset_path: Path = PROJECT_ROOT / "datasets" / "generated" / "invoice-eval.jsonl"
+    evaluation_report_path: Path = PROJECT_ROOT / "datasets" / "generated" / "quality-report.json"
+    auto_accept_threshold: float = 0.85
     jwt_secret: str = "replace-in-production"
 
 

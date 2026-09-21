@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any
 
 from docflow.ai.base import ClassificationResult, ExtractionResult
@@ -11,6 +13,16 @@ class MockProvider:
 
     def __init__(self, responses: Mapping[str, dict[str, Any]] | None = None) -> None:
         self._responses = dict(responses or {})
+
+    @classmethod
+    def from_file(cls, path: Path) -> MockProvider:
+        if not path.exists():
+            return cls()
+        with path.open(encoding="utf-8") as source:
+            payload = json.load(source)
+        if not isinstance(payload, dict):
+            raise ValueError("Recorded LLM response must contain a JSON object")
+        return cls(payload)
 
     async def classify(self, *, text: str) -> ClassificationResult:
         response = self._responses.get("classification", {})

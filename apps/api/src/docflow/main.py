@@ -3,8 +3,10 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from docflow import __version__
@@ -45,6 +47,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["*"],
     )
     app.include_router(api_router, prefix=resolved_settings.api_prefix)
+
+    web_root = resolved_settings.web_dist_root
+    if web_root is not None:
+        resolved_web_root = web_root.resolve()
+        index_file = resolved_web_root / "index.html"
+        assets_root = resolved_web_root / "assets"
+        if index_file.is_file():
+            if assets_root.is_dir():
+                app.mount("/assets", StaticFiles(directory=assets_root), name="web-assets")
+
+            @app.get("/{full_path:path}", include_in_schema=False)
+            async def serve_web_app(full_path: str) -> FileResponse:
+                if full_path.startswith(resolved_settings.api_prefix.lstrip("/")):
+                    raise HTTPException(status_code=404, detail="Not found")
+                candidate = (resolved_web_root / full_path).resolve()
+                if candidate.is_relative_to(resolved_web_root) and candidate.is_file():
+                    return FileResponse(candidate)
+                return FileResponse(index_file)
+
     return app
 
 

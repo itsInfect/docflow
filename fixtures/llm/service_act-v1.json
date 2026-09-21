@@ -1,0 +1,21 @@
+{
+  "classification": {
+    "document_type": "service_act",
+    "confidence": 0.96
+  },
+  "extraction": {
+    "fields": {
+      "doc_number": "ACT-77",
+      "doc_date": "20.09.2026",
+      "supplier_inn": "7707083893",
+      "supplier_name": "ООО Север",
+      "buyer_inn": "7736050003",
+      "buyer_name": "ООО Маяк",
+      "amount_without_vat": "25 000,00",
+      "vat_rate": "20%",
+      "vat_amount": "5 000,00",
+      "total_amount": "30 000,00",
+      "currency": "RUB"
+    }
+  }
+}

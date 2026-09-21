@@ -1,31 +1,101 @@
 # Docflow
 
-Portfolio-grade workflow for extracting, validating, reviewing, and exporting data from Russian accounting documents.
+Docflow — локальная система обработки российских бухгалтерских документов с участием
+оператора. Она принимает PDF и изображения, извлекает и нормализует реквизиты, проверяет их
+детерминированными правилами, направляет сомнительные результаты на ручную проверку и выгружает
+подтверждённые данные в CSV или XLSX.
 
-The repository is intentionally built around an unreliable AI component: model output is grounded in source text, checked by deterministic rules, and routed to a human reviewer when risk is too high.
+Проект построен вокруг принципа **«ИИ предлагает — правила и человек принимают решение»**.
+Результат модели не считается достоверным сам по себе: значения сверяются с исходным текстом,
+проходят бизнес-валидацию и сохраняются в виде неизменяемых ревизий с полной историей решений.
 
-## Repository layout
+## Статус проекта
+
+Портфолио-релиз завершён. Сквозной локальный сценарий работает без Docker, облачной
+инфраструктуры и платного ИИ-провайдера. В проект входят:
+
+- пакетная загрузка до 20 документов;
+- проверка MIME-типа по сигнатуре файла и ограничение размера до 20 МБ;
+- PDF, JPEG, PNG и TIFF;
+- извлечение текстового слоя PDF и рендеринг страниц;
+- OCR сканов через локальный Tesseract (`rus+eng`);
+- классификация счетов и актов выполненных работ;
+- схемы и промпты с версионированием;
+- нормализация денежных значений и реквизитов;
+- проверка обязательных полей, ИНН, дат, НДС, итогов и привязки к исходному тексту;
+- автоматическое принятие безопасных результатов по настраиваемому порогу;
+- очередь ручной проверки, исправление и подтверждение результата;
+- неизменяемые ревизии и журнал переходов статусов;
+- обнаружение точных и бизнес-дубликатов;
+- оценка качества на независимых development, holdout и OCR-stress наборах;
+- экспорт последних подтверждённых ревизий в UTF-8 CSV и XLSX;
+- адаптивный русскоязычный интерфейс оператора.
+
+## Как устроен процесс
 
 ```text
-apps/api/              FastAPI, workers, domain and infrastructure
-apps/web/              React operator interface
-schemas/               Versioned document-type schemas
-prompts/               Versioned extraction prompts
-fixtures/llm/          Recorded model responses for demo mode
-datasets/generated/    Generated documents (not committed by default)
-docs/                  Architecture and delivery notes
-scripts/               Local development helpers
+Загрузка документа
+        ↓
+Проверка сигнатуры и поиск точного дубликата
+        ↓
+Извлечение текста / OCR и подготовка превью
+        ↓
+Классификация и извлечение полей по версии схемы
+        ↓
+Нормализация, grounding и бизнес-валидация
+        ↓
+Автопринятие ─────── или ─────── Ручная проверка
+        ↓                              ↓
+Неизменяемая подтверждённая ревизия и аудит
+        ↓
+Экспорт CSV / XLSX
 ```
 
-## Local development
+ИИ-провайдер не меняет статус документа самостоятельно. Решение принимает прикладной слой на
+основании нормализованных данных, результатов проверок, grounding и порога уверенности.
 
-Install project-local dependencies once:
+## Технологии
+
+| Слой | Технологии |
+| --- | --- |
+| API | Python 3.11–3.13, FastAPI, Pydantic, SQLAlchemy, Alembic |
+| Обработка | PyMuPDF, Pillow, OpenCV, pytesseract, RapidFuzz |
+| ИИ | воспроизводимый локальный провайдер; опционально Anthropic |
+| Интерфейс | React 19, TypeScript, Vite, React Router, TanStack Query |
+| Локальное хранение | SQLite и файловая система |
+| Production-профиль | PostgreSQL, Redis, Celery, MinIO, Docker Compose |
+| Качество | pytest, Ruff, mypy, ESLint, TypeScript |
+
+## Быстрый запуск
+
+### Требования
+
+- Windows и PowerShell;
+- Python 3.11, 3.12 или 3.13;
+- Node.js и npm;
+- Tesseract OCR с русским и английским языковыми пакетами — только для сканов и изображений;
+- Docker Desktop — только для запуска Compose-профиля.
+
+### 1. Установка зависимостей
+
+Из корня репозитория выполните:
 
 ```powershell
 .\scripts\bootstrap.ps1
 ```
 
-The checked-in defaults are enough for health checks. Copy `.env.example` to `.env` when you need to override services or secrets. Then start the applications separately:
+Скрипт создаст `apps/api/.venv`, установит API с dev-зависимостями и выполнит `npm install` для
+веб-интерфейса.
+
+При необходимости скопируйте `.env.example` в `.env` и измените параметры:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Значения по умолчанию уже подходят для локального демо и не требуют внешних сервисов.
+
+### 2. Запуск API
 
 ```powershell
 cd apps/api
@@ -33,29 +103,184 @@ cd apps/api
 uvicorn docflow.main:app --reload
 ```
 
+API будет доступен по адресу `http://localhost:8000`, Swagger UI —
+`http://localhost:8000/docs`.
+
+### 3. Запуск интерфейса
+
+В отдельном окне PowerShell:
+
 ```powershell
 cd apps/web
 npm run dev
 ```
 
-The API is available at `http://localhost:8000`; Swagger UI is at `/docs`. The web app runs at `http://localhost:5173`.
+Откройте `http://localhost:5173`.
 
-The default development profile needs no external services. It stores metadata in `apps/api/storage/docflow.db` and document bytes below `apps/api/storage/originals/`. Both are ignored by Git. Uploaded content is checked by file signature rather than filename extension.
+Локальный профиль хранит метаданные в `apps/api/storage/docflow.db`, а исходные и производные
+файлы — в `apps/api/storage/`. Эти данные исключены из Git.
 
-Run the current verification suite with:
+## OCR
+
+Для цифровых PDF дополнительное системное ПО не требуется. Для сканов установите Tesseract OCR
+с языками `rus` и `eng`.
+
+В Windows стандартная установка
+`C:\Program Files\Tesseract-OCR\tesseract.exe` обнаруживается автоматически. Нестандартный путь
+можно указать в `.env`:
+
+```dotenv
+DOCFLOW_TESSERACT_CMD=C:/Tools/Tesseract-OCR/tesseract.exe
+DOCFLOW_OCR_LANGUAGES=rus+eng
+```
+
+Проверка OCR независимо от приложения:
+
+```powershell
+$env:PYTHONPATH="apps/api/src"
+apps/api/.venv/Scripts/python.exe scripts/verify_ocr.py
+```
+
+Если OCR недоступен, документ не теряется: обработка получает состояние `awaiting_ocr` и может
+быть возобновлена после установки Tesseract.
+
+## Демо за пять минут
+
+Сгенерируйте воспроизводимые тестовые документы:
+
+```powershell
+apps/api/.venv/Scripts/python.exe scripts/generate_demo_documents.py
+```
+
+Файлы появятся в `fixtures/demo-documents/`. После запуска API и интерфейса:
+
+1. Загрузите `invoice-demo.pdf` и `service-act-demo.pdf` одной пачкой.
+2. На странице **«Документы»** запустите обработку обоих файлов.
+3. На странице **«Проверка»** измените поле и создайте операторскую ревизию, затем подтвердите её.
+4. Выгрузите подтверждённые данные в CSV или XLSX.
+5. На странице **«История»** проверьте системные и операторские переходы.
+6. На странице **«Качество»** запустите оценку и изучите метрики и рекомендуемый порог.
+
+Отдельный сценарий демонстрации описан в [docs/demo.md](docs/demo.md).
+
+## Провайдеры извлечения
+
+### Локальный режим
+
+По умолчанию используется `DOCFLOW_LLM_PROVIDER=mock`. Несмотря на историческое имя настройки,
+это локальный детерминированный провайдер: он анализирует распознанный текст текущего документа и
+не отправляет данные во внешние сервисы. Такой режим бесплатен, работает офлайн и даёт
+воспроизводимый результат.
+
+### Anthropic
+
+Для проверки реальной модели задайте в `.env`:
+
+```dotenv
+DOCFLOW_LLM_PROVIDER=anthropic
+DOCFLOW_ANTHROPIC_API_KEY=your-api-key
+DOCFLOW_ANTHROPIC_MODEL=your-model-id
+```
+
+Ключи нельзя добавлять в Git. Файл `.env` уже находится в `.gitignore`.
+
+## Оценка качества
+
+Воспроизводимый baseline запускается командой:
+
+```powershell
+apps/api/.venv/Scripts/python.exe scripts/evaluate.py
+```
+
+Отчёт включает точность классификации, точность всех и критичных полей, grounding, покрытие и
+точность straight-through processing, а также кривую выбора порога. Результаты записываются в
+`datasets/generated/` и доступны в разделе **«Качество»** через API.
+
+## Проверка проекта
+
+Полный набор автоматических проверок:
 
 ```powershell
 .\scripts\verify.ps1
 ```
 
-Docker Compose configuration is included, but Docker must be installed separately before it can be used:
+Он последовательно запускает:
+
+- тесты API (`pytest`);
+- статический анализ и проверку форматирования Python (`ruff`);
+- строгую типизацию Python (`mypy`);
+- линтер веб-приложения (`eslint`);
+- production-сборку TypeScript/Vite.
+
+## Основные API-маршруты
+
+Все маршруты имеют префикс `/api/v1`.
+
+| Метод и путь | Назначение |
+| --- | --- |
+| `GET /health` | состояние API |
+| `GET /ready` | готовность API и базы данных |
+| `GET /capabilities` | активный провайдер, OCR, лимиты и типы документов |
+| `POST /documents` | загрузка документа |
+| `GET /documents` | список документов |
+| `POST /documents/{id}/process` | запуск обработки |
+| `POST /documents/{id}/duplicate-decision` | решение по точному дубликату |
+| `GET /documents/{id}/runs` | история запусков обработки |
+| `GET /documents/{id}/revisions` | ревизии результата |
+| `POST /documents/{id}/revisions/{revision_id}/corrections` | операторское исправление |
+| `POST /documents/{id}/revisions/{revision_id}/approve` | подтверждение ревизии |
+| `GET /audit/events` | журнал переходов статусов |
+| `GET /quality/report` | последний отчёт качества |
+| `POST /quality/run` | запуск оценки качества |
+| `GET /exports/revisions?format=csv\|xlsx` | экспорт подтверждённых ревизий |
+
+Актуальные схемы запросов и ответов всегда доступны в Swagger UI.
+
+## Структура репозитория
 
 ```text
+apps/
+  api/                    FastAPI, домен, сценарии, инфраструктура и тесты
+  web/                    React-интерфейс оператора
+schemas/                  версионируемые схемы типов документов
+prompts/                  версионируемые шаблоны извлечения
+fixtures/
+  llm/                    профили локального провайдера
+  demo-documents/         демонстрационные PDF и изображения
+datasets/generated/       генерируемые датасеты и отчёты качества
+docs/                     архитектура, roadmap и сценарий демонстрации
+scripts/                  установка, проверка, OCR, генерация и evaluation
+compose.yaml              инфраструктурный Docker Compose-профиль
+```
+
+Подробнее об устройстве системы: [docs/architecture.md](docs/architecture.md). Завершённые этапы
+и границы релиза: [docs/roadmap.md](docs/roadmap.md). Идеи за пределами релиза:
+[BACKLOG.md](BACKLOG.md).
+
+## Docker Compose
+
+В репозитории есть профиль с PostgreSQL, Redis, MinIO, API, Celery worker и веб-интерфейсом:
+
+```powershell
 docker compose up --build
 ```
 
-## Current milestone
+Он показывает направление production-развёртывания. Основной портфолио-сценарий намеренно
+остаётся самодостаточным и использует SQLite, локальные файлы и синхронную обработку.
 
-The first vertical slice accepts one PDF, JPEG, PNG, or TIFF file up to 20 MB. It streams the file into content-addressed local storage, persists metadata and a status transition, detects exact SHA-256 duplicates, and shows recent documents in the web interface.
+## Архитектурные свойства
 
-The next slice will preprocess accepted files: determine PDF page count, extract the text layer, render page previews, and route image-only pages to OCR.
+- **Модульный монолит:** домен, прикладные сценарии и инфраструктура разделены явно.
+- **Human in the loop:** рискованные или неполные результаты не принимаются автоматически.
+- **Неизменяемость:** повторная обработка и исправления добавляют ревизии вместо перезаписи.
+- **Аудит:** каждый переход хранит автора, причину, старый и новый статус и время.
+- **Расширяемость:** новый тип документа можно добавить схемой и промптом, если достаточно
+  существующих нормализаторов, валидаторов и UI-компонентов.
+- **Воспроизводимость:** локальный провайдер и независимый evaluation не требуют сетевых вызовов.
+
+## Ограничения и дальнейшее развитие
+
+Текущий релиз предназначен для локальной демонстрации и портфолио. Для промышленной эксплуатации
+потребуются аутентификация и роли, многопользовательская изоляция, фоновые очереди, объектное
+хранилище, мониторинг, резервное копирование, CI/CD и защищённое развёртывание. Эти задачи явно
+вынесены в backlog и не маскируются демо-зависимостями.

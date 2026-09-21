@@ -15,9 +15,9 @@ Push-Location $apiRoot
 try {
     & $python -m pytest
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-    & $ruff check .
+    & $ruff check . (Join-Path $projectRoot "scripts")
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-    & $ruff format --check .
+    & $ruff format --check . (Join-Path $projectRoot "scripts")
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     & $mypy src
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

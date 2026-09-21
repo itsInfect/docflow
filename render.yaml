@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: docflow-portfolio
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/v1/ready
+    autoDeployTrigger: off
+    envVars:
+      - key: DOCFLOW_AUTO_CREATE_SCHEMA
+        value: "true"
+      - key: DOCFLOW_CORS_ORIGINS
+        value: "[]"
